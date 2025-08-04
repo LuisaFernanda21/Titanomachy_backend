@@ -1,24 +1,23 @@
-const express = require("express");
-const cors = require("cors");
-const { Server } = require("socket.io");
-const http = require("http");
-const { Pool } = require("pg");
+const express = require('express');
+const cors = require('cors');
+const { Server } = require('socket.io');
+const http = require('http');
+const { Pool } = require('pg');
 
 const app = express();
 const server = http.createServer(app);
 
-// CORS
-app.use(cors());
-app.use(express.json());
-
-// Socket.IO
 const io = new Server(server, {
   cors: {
-    origin: "*"
+    origin: '*',
+    methods: ['GET', 'POST']
   }
 });
 
-// PostgreSQL connection
+app.use(cors());
+app.use(express.json());
+
+// Conexión a PostgreSQL usando DATABASE_URL desde Railway
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: {
@@ -26,68 +25,49 @@ const pool = new Pool({
   }
 });
 
-// Socket.IO - conexión
-io.on("connection", (socket) => {
-  console.log("Usuario conectado");
-  socket.on("disconnect", () => {
-    console.log("Usuario desconectado");
-  });
-});
-
-// Ruta de prueba
-app.get("/", (req, res) => {
-  res.send("Backend funcionando en Railway 🚂");
-});
-
-// Ruta para obtener estudiantes
-app.get("/estudiantes", async (req, res) => {
+// Endpoint para obtener todos los estudiantes
+app.get('/estudiantes', async (req, res) => {
   try {
-    const result = await pool.query("SELECT * FROM estudiantes ORDER BY puntos DESC");
+    const result = await pool.query('SELECT * FROM estudiantes');
     res.json(result.rows);
   } catch (error) {
-    console.error("Error al obtener estudiantes:", error);
-    res.status(500).json({ error: "Error interno del servidor" });
+    console.error('Error al obtener estudiantes', error);
+    res.status(500).json({ error: 'Error al obtener estudiantes' });
   }
 });
 
-// Actualizar puntos
-app.post("/update", async (req, res) => {
+// Endpoint para actualizar puntos
+app.post('/update', async (req, res) => {
   const { name, puntos, docente } = req.body;
-  try {
-    const result = await pool.query(
-      "UPDATE estudiantes SET puntos = puntos + $1 WHERE name = $2 RETURNING *",
-      [puntos, name]
-    );
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: "Estudiante no encontrado" });
-    }
+  try {
+    await pool.query('UPDATE estudiantes SET puntos = puntos + $1 WHERE name = $2', [puntos, name]);
 
     await pool.query(
-      "INSERT INTO historial (docente, estudiante, puntos, fecha) VALUES ($1, $2, $3, NOW())",
+      'INSERT INTO historial (docente, estudiante, puntos, fecha) VALUES ($1, $2, $3, NOW())',
       [docente, name, puntos]
     );
 
-    io.emit("actualizacion");
-    res.json({ success: true });
+    io.emit('actualizacionPuntos', { name, puntos });
+    res.status(200).json({ mensaje: 'Puntos actualizados correctamente' });
   } catch (error) {
-    console.error("Error al actualizar puntos:", error);
-    res.status(500).json({ error: "Error al actualizar puntos" });
+    console.error('Error al actualizar puntos', error);
+    res.status(500).json({ error: 'Error al actualizar puntos' });
   }
 });
 
-// Historial de cambios
-app.get("/historial", async (req, res) => {
+// Endpoint para obtener el ranking
+app.get('/ranking', async (req, res) => {
   try {
-    const result = await pool.query("SELECT * FROM historial ORDER BY fecha DESC");
+    const result = await pool.query('SELECT * FROM estudiantes ORDER BY puntos DESC');
     res.json(result.rows);
   } catch (error) {
-    console.error("Error al obtener historial:", error);
-    res.status(500).json({ error: "Error al obtener historial" });
+    console.error('Error al obtener ranking', error);
+    res.status(500).json({ error: 'Error al obtener ranking' });
   }
 });
 
-// Puerto dinámico para Railway
+// Escuchar en el puerto asignado por Railway
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
   console.log(`Servidor escuchando en el puerto ${PORT}`);
