@@ -1,32 +1,56 @@
-const express = require("express");
-const cors = require("cors");
-const { Pool } = require("pg");
+const express = require('express');
+const cors = require('cors');
+const { Server } = require('socket.io');
+const http = require('http');
+const { Pool } = require('pg');
+require('dotenv').config();
 
 const app = express();
-const PORT = process.env.PORT || 8080;
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: '*',
+  },
+});
 
 app.use(cors());
 app.use(express.json());
 
-// Configura tu conexión a PostgreSQL
+// Conexión a PostgreSQL con Pool
 const pool = new Pool({
-  connectionString: "postgresql://leaderboard_330l_user:O7EcrAHLA9bfca3Y2jbB8i1qub9YvwAw@dpg-d1t211ruibrs738q5pbg-a.oregon-postgres.render.com/leaderboard_330l",
+  connectionString: process.env.DATABASE_URL, // Desde archivo .env
   ssl: {
-    rejectUnauthorized: false
-  }
+    rejectUnauthorized: false,
+  },
 });
 
-// Ruta GET para obtener los estudiantes
-app.get("/estudiantes", async (req, res) => {
+// Ruta de prueba
+app.get('/', (req, res) => {
+  res.send('Servidor funcionando');
+});
+
+// Obtener todos los estudiantes
+app.get('/estudiantes', async (req, res) => {
   try {
-    const result = await pool.query("SELECT * FROM public.estudiantes ORDER BY id ASC");
+    const result = await pool.query('SELECT * FROM estudiantes ORDER BY id ASC');
     res.json(result.rows);
-  } catch (err) {
-    console.error("Error al obtener estudiantes:", err);
-    res.status(500).json({ error: "Error interno del servidor" });
+  } catch (error) {
+    console.error('Error al obtener estudiantes:', error);
+    res.status(500).json({ error: 'Error interno del servidor' });
   }
 });
 
-app.listen(PORT, () => {
+// Iniciar servidor
+const PORT = process.env.PORT || 8080;
+server.listen(PORT, () => {
   console.log(`Servidor escuchando en el puerto ${PORT}`);
+});
+
+// Socket.IO: actualizar en tiempo real (si lo necesitas después)
+io.on('connection', (socket) => {
+  console.log('Cliente conectado');
+
+  socket.on('disconnect', () => {
+    console.log('Cliente desconectado');
+  });
 });
