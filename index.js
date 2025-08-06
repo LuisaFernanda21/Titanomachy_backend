@@ -1,6 +1,10 @@
 const express = require("express");
 const cors = require("cors");
 const bodyParser = require("body-parser");
+
+// Log de inicio
+console.log("🚀 Iniciando servidor TITANOMACHY...");
+
 const {
   getEstudiantes,
   getEstudianteById,
@@ -10,14 +14,15 @@ const {
   findEstudianteByName
 } = require("./estudiantes");
 
+console.log("✅ Módulos importados correctamente");
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 
 // Contraseña para gestionar puntos
 const ADMIN_PASSWORD = "torneo2025";
 
-// Conexión a la base de datos local en PostgreSQL
-const db = pgp("postgres://postgres:01012021Lf*@localhost:5433/Torneo_local");
+console.log(`🔧 Configurando servidor en puerto ${PORT}`);
 
 // Middlewares
 app.use(cors());
@@ -122,25 +127,15 @@ app.get("/estudiantes", async (req, res) => {
 app.get("/estudiantes/:identifier", async (req, res) => {
   try {
     const { identifier } = req.params;
+    console.log(`🔍 Buscando estudiante: ${identifier}`);
     
-    // Intenta desde la base de datos primero (si existe el ID)
-    if (!isNaN(identifier)) {
-      try {
-        const estudiante = await db.oneOrNone("SELECT * FROM estudiantes WHERE id = $1", [identifier]);
-        if (estudiante) {
-          res.json(estudiante);
-          return;
-        }
-      } catch (dbError) {
-        console.warn("⚠️ Error en BD, usando archivo local:", dbError.message);
-      }
-    }
-    
-    // Si no encuentra en BD o no es un ID numérico, busca en archivo local
+    // Buscar en archivo JSON local
     const estudiante = getEstudianteById(identifier);
     if (estudiante) {
+      console.log(`✅ Estudiante encontrado: ${estudiante.name}`);
       res.json(estudiante);
     } else {
+      console.log(`❌ Estudiante no encontrado: ${identifier}`);
       res.status(404).json({ error: "Estudiante no encontrado" });
     }
   } catch (error) {
@@ -154,29 +149,23 @@ app.put("/estudiantes/:identifier/puntos", verifyPassword, async (req, res) => {
   try {
     const { identifier } = req.params;
     const { puntos } = req.body;
+    console.log(`🔄 Actualizando puntos de ${identifier} a ${puntos}`);
 
-    // Intenta actualizar en BD primero
-    if (!isNaN(identifier)) {
-      try {
-        await db.none("UPDATE estudiantes SET puntos = $1 WHERE id = $2", [puntos, identifier]);
-        const updated = await db.one("SELECT * FROM estudiantes WHERE id = $1", [identifier]);
-        res.json({ success: true, estudiante: updated });
-        return;
-      } catch (dbError) {
-        console.warn("⚠️ Error en BD, usando archivo local:", dbError.message);
-      }
-    }
-
-    // Si falla BD, usa archivo local
+    // Usar archivo JSON local únicamente
     const updated = updateEstudiantePoints(identifier, puntos);
     if (updated) {
+      console.log(`✅ Puntos actualizados correctamente`);
       res.json({ success: true, estudiante: updated });
     } else {
+      console.log(`❌ Estudiante no encontrado: ${identifier}`);
       res.status(404).json({ error: "Estudiante no encontrado" });
     }
   } catch (error) {
     console.error("❌ Error al actualizar puntos:", error);
-    res.status(500).json({ error: "Error al actualizar puntos" });
+    res.status(500).json({ 
+      error: "Error al actualizar puntos",
+      details: error.message
+    });
   }
 });
 
@@ -379,4 +368,26 @@ app.listen(PORT, () => {
   console.log("   GET /buscar/:nombre - Buscar estudiantes por nombre");
   console.log("   POST /auth/verify - Verificar contraseña");
   console.log("🔐 Contraseña de administrador: torneo2025");
+});
+
+// Manejo de errores global
+process.on('uncaughtException', (error) => {
+  console.error('❌ Error no capturado:', error);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ Promesa rechazada no manejada:', reason);
+  process.exit(1);
+});
+
+// Manejo de señales de terminación
+process.on('SIGTERM', () => {
+  console.log('🛑 Recibida señal SIGTERM, cerrando servidor...');
+  process.exit(0);
+});
+
+process.on('SIGINT', () => {
+  console.log('🛑 Recibida señal SIGINT, cerrando servidor...');
+  process.exit(0);
 });
