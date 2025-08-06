@@ -1,8 +1,6 @@
 const express = require("express");
 const cors = require("cors");
 const bodyParser = require("body-parser");
-const path = require("path");
-const pgp = require("pg-promise")();
 const {
   getEstudiantes,
   getEstudianteById,
@@ -55,15 +53,55 @@ app.get("/", (req, res) => {
   });
 });
 
+// Ruta de salud para verificar que el servidor funciona
+app.get("/health", (req, res) => {
+  res.json({ 
+    status: "✅ Servidor funcionando",
+    timestamp: new Date().toISOString(),
+    message: "Backend TITANOMACHY está operativo"
+  });
+});
+
+// Ruta para verificar archivos (debug)
+app.get("/debug", (req, res) => {
+  const fs = require('fs');
+  const path = require('path');
+  
+  try {
+    const estudiantesPath = path.join(__dirname, 'estudiantes.json');
+    const estudiantesJsPath = path.join(__dirname, 'estudiantes.js');
+    
+    res.json({
+      message: "🔍 Debug de archivos",
+      files: {
+        "estudiantes.json": fs.existsSync(estudiantesPath) ? "✅ Existe" : "❌ No existe",
+        "estudiantes.js": fs.existsSync(estudiantesJsPath) ? "✅ Existe" : "❌ No existe"
+      },
+      paths: {
+        __dirname,
+        estudiantesPath,
+        estudiantesJsPath
+      }
+    });
+  } catch (error) {
+    res.json({ error: error.message });
+  }
+});
+
 // Ruta: obtener el ranking de estudiantes (usando archivo JSON)
 app.get("/ranking", async (req, res) => {
   try {
-    // Usar solo el archivo JSON para consistencia
+    console.log("📊 Solicitando ranking...");
     const rankingLocal = getRanking();
+    console.log(`✅ Ranking obtenido: ${rankingLocal.length} estudiantes`);
     res.json(rankingLocal);
   } catch (error) {
     console.error("❌ Error al obtener el ranking:", error);
-    res.status(500).json({ error: "Error al obtener el ranking" });
+    res.status(500).json({ 
+      error: "Error al obtener el ranking",
+      details: error.message,
+      timestamp: new Date().toISOString()
+    });
   }
 });
 
