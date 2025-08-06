@@ -1,56 +1,331 @@
-const express = require('express');
-const cors = require('cors');
-const { Server } = require('socket.io');
-const http = require('http');
-const { Pool } = require('pg');
-require('dotenv').config();
+const express = require("express");
+const cors = require("cors");
+const bodyParser = require("body-parser");
+const path = require("path");
+const pgp = require("pg-promise")();
+const {
+  getEstudiantes,
+  getEstudianteById,
+  updateEstudiantePoints,
+  getRanking,
+  getEstudiantesByCurso,
+  findEstudianteByName
+} = require("./estudiantes");
 
 const app = express();
-const server = http.createServer(app);
-const io = new Server(server, {
-  cors: {
-    origin: '*',
-  },
-});
+const PORT = 3001;
 
+// Contraseña para gestionar puntos
+const ADMIN_PASSWORD = "torneo2025";
+
+// Conexión a la base de datos local en PostgreSQL
+const db = pgp("postgres://postgres:01012021Lf*@localhost:5433/Torneo_local");
+
+// Middlewares
 app.use(cors());
-app.use(express.json());
+app.use(bodyParser.json());
 
-// Conexión a PostgreSQL con Pool
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL, // Desde archivo .env
-  ssl: {
-    rejectUnauthorized: false,
-  },
+// Servir archivos estáticos del frontend
+app.use(express.static(path.join(__dirname, '../frontend')));
+
+// Middleware para verificar contraseña en rutas protegidas
+const verifyPassword = (req, res, next) => {
+  const { password } = req.body;
+  if (password !== ADMIN_PASSWORD) {
+    return res.status(401).json({ error: "Contraseña incorrecta" });
+  }
+  next();
+};
+
+// Ruta principal de prueba
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, '../frontend/index.html'));
 });
 
-// Ruta de prueba
-app.get('/', (req, res) => {
-  res.send('Servidor funcionando');
-});
-
-// Obtener todos los estudiantes
-app.get('/estudiantes', async (req, res) => {
+// Ruta: obtener el ranking de estudiantes (usando archivo JSON)
+app.get("/ranking", async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM estudiantes ORDER BY id ASC');
-    res.json(result.rows);
+    // Usar solo el archivo JSON para consistencia
+    const rankingLocal = getRanking();
+    res.json(rankingLocal);
   } catch (error) {
-    console.error('Error al obtener estudiantes:', error);
-    res.status(500).json({ error: 'Error interno del servidor' });
+    console.error("❌ Error al obtener el ranking:", error);
+    res.status(500).json({ error: "Error al obtener el ranking" });
+  }
+});
+
+
+// Ruta: obtener todos los estudiantes (usando archivo JSON)
+app.get("/estudiantes", async (req, res) => {
+  try {
+    // Usar solo el archivo JSON para consistencia
+    const estudiantesLocal = getEstudiantes();
+    res.json(estudiantesLocal);
+  } catch (error) {
+    console.error("❌ Error al obtener estudiantes:", error);
+    res.status(500).json({ error: "Error al obtener estudiantes" });
+  }
+});
+
+// Ruta: obtener estudiante por ID (índice) o nombre
+app.get("/estudiantes/:identifier", async (req, res) => {
+  try {
+    const { identifier } = req.params;
+    
+    // Intenta desde la base de datos primero (si existe el ID)
+    if (!isNaN(identifier)) {
+      try {
+        const estudiante = await db.oneOrNone("SELECT * FROM estudiantes WHERE id = $1", [identifier]);
+        if (estudiante) {
+          res.json(estudiante);
+          return;
+        }
+      } catch (dbError) {
+        console.warn("⚠️ Error en BD, usando archivo local:", dbError.message);
+      }
+    }
+    
+    // Si no encuentra en BD o no es un ID numérico, busca en archivo local
+    const estudiante = getEstudianteById(identifier);
+    if (estudiante) {
+      res.json(estudiante);
+    } else {
+      res.status(404).json({ error: "Estudiante no encontrado" });
+    }
+  } catch (error) {
+    console.error("❌ Error al obtener estudiante:", error);
+    res.status(500).json({ error: "Error al obtener estudiante" });
+  }
+});
+
+// Ruta: actualizar puntos de un estudiante (con autenticación)
+app.put("/estudiantes/:identifier/puntos", verifyPassword, async (req, res) => {
+  try {
+    const { identifier } = req.params;
+    const { puntos } = req.body;
+
+    // Intenta actualizar en BD primero
+    if (!isNaN(identifier)) {
+      try {
+        await db.none("UPDATE estudiantes SET puntos = $1 WHERE id = $2", [puntos, identifier]);
+        const updated = await db.one("SELECT * FROM estudiantes WHERE id = $1", [identifier]);
+        res.json({ success: true, estudiante: updated });
+        return;
+      } catch (dbError) {
+        console.warn("⚠️ Error en BD, usando archivo local:", dbError.message);
+      }
+    }
+
+    // Si falla BD, usa archivo local
+    const updated = updateEstudiantePoints(identifier, puntos);
+    if (updated) {
+      res.json({ success: true, estudiante: updated });
+    } else {
+      res.status(404).json({ error: "Estudiante no encontrado" });
+    }
+  } catch (error) {
+    console.error("❌ Error al actualizar puntos:", error);
+    res.status(500).json({ error: "Error al actualizar puntos" });
+  }
+});
+
+// Ruta: sumar puntos a un estudiante
+app.post("/estudiantes/:identifier/sumar", verifyPassword, async (req, res) => {
+  try {
+    const { identifier } = req.params;
+    const { puntos } = req.body;
+
+    console.log(`🔄 Sumando ${puntos} puntos al estudiante: ${identifier}`);
+
+    if (!puntos || puntos <= 0) {
+      return res.status(400).json({ error: "Los puntos deben ser un número positivo" });
+    }
+
+    // Obtener estudiante actual directamente del archivo JSON
+    const estudianteActual = getEstudianteById(identifier);
+
+    if (!estudianteActual) {
+      console.log(`❌ Estudiante no encontrado: ${identifier}`);
+      return res.status(404).json({ error: "Estudiante no encontrado" });
+    }
+
+    const puntosAnteriores = estudianteActual.puntos || 0;
+    const nuevoPuntaje = puntosAnteriores + puntos;
+
+    console.log(`📊 ${estudianteActual.name}: ${puntosAnteriores} + ${puntos} = ${nuevoPuntaje}`);
+
+    // Actualizar puntos usando solo el archivo JSON
+    const updated = updateEstudiantePoints(identifier, nuevoPuntaje);
+    if (updated) {
+      console.log(`✅ Puntos actualizados: ${updated.name} (${puntosAnteriores} → ${updated.puntos})`);
+      res.json({ success: true, estudiante: updated, puntosAgregados: puntos });
+    } else {
+      console.log(`❌ Error al actualizar puntos para: ${identifier}`);
+      res.status(500).json({ error: "Error al actualizar puntos" });
+    }
+  } catch (error) {
+    console.error("❌ Error al sumar puntos:", error);
+    res.status(500).json({ error: "Error al sumar puntos" });
+  }
+});
+
+// Ruta: restar puntos a un estudiante
+app.post("/estudiantes/:identifier/restar", verifyPassword, async (req, res) => {
+  try {
+    const { identifier } = req.params;
+    const { puntos } = req.body;
+
+    console.log(`🔄 Restando ${puntos} puntos al estudiante: ${identifier}`);
+
+    if (!puntos || puntos <= 0) {
+      return res.status(400).json({ error: "Los puntos deben ser un número positivo" });
+    }
+
+    // Obtener estudiante actual directamente del archivo JSON
+    const estudianteActual = getEstudianteById(identifier);
+
+    if (!estudianteActual) {
+      console.log(`❌ Estudiante no encontrado: ${identifier}`);
+      return res.status(404).json({ error: "Estudiante no encontrado" });
+    }
+
+    const puntosAnteriores = estudianteActual.puntos || 0;
+    const nuevoPuntaje = puntosAnteriores - puntos; // Permitir puntos negativos
+
+    console.log(`📊 ${estudianteActual.name}: ${puntosAnteriores} - ${puntos} = ${nuevoPuntaje}`);
+
+    // Actualizar puntos usando solo el archivo JSON
+    const updated = updateEstudiantePoints(identifier, nuevoPuntaje);
+    if (updated) {
+      console.log(`✅ Puntos actualizados: ${updated.name} (${puntosAnteriores} → ${updated.puntos})`);
+      res.json({ success: true, estudiante: updated, puntosRestados: puntos });
+    } else {
+      console.log(`❌ Error al actualizar puntos para: ${identifier}`);
+      res.status(500).json({ error: "Error al actualizar puntos" });
+    }
+  } catch (error) {
+    console.error("❌ Error al restar puntos:", error);
+    res.status(500).json({ error: "Error al restar puntos" });
+  }
+});
+
+// Ruta: buscar estudiantes por nombre
+app.get("/buscar/:nombre", (req, res) => {
+  try {
+    const { nombre } = req.params;
+    const estudiantes = getEstudiantes();
+    const resultados = estudiantes.filter(est => 
+      est.name.toLowerCase().includes(nombre.toLowerCase())
+    );
+    res.json(resultados);
+  } catch (error) {
+    console.error("❌ Error al buscar estudiantes:", error);
+    res.status(500).json({ error: "Error al buscar estudiantes" });
+  }
+});
+
+// Ruta: verificar contraseña
+app.post("/auth/verify", (req, res) => {
+  const { password } = req.body;
+  if (password === "torneo2025") {
+    res.json({ valid: true, message: "Contraseña correcta" });
+  } else {
+    res.status(401).json({ valid: false, message: "Contraseña incorrecta" });
+  }
+});
+
+// Ruta: obtener estudiantes por curso
+app.get("/curso/:curso", (req, res) => {
+  try {
+    const { curso } = req.params;
+    const estudiantes = getEstudiantesByCurso(curso);
+    res.json(estudiantes);
+  } catch (error) {
+    console.error("❌ Error al obtener estudiantes por curso:", error);
+    res.status(500).json({ error: "Error al obtener estudiantes por curso" });
+  }
+});
+
+// Ruta: obtener ranking por curso específico (usando archivo JSON)
+app.get("/ranking/curso/:curso", async (req, res) => {
+  try {
+    const { curso } = req.params;
+    
+    // Usar solo el archivo JSON para consistencia
+    const estudiantesLocal = getEstudiantesByCurso(curso);
+    const rankingLocal = estudiantesLocal.sort((a, b) => (b.puntos || 0) - (a.puntos || 0));
+    res.json(rankingLocal);
+  } catch (error) {
+    console.error("❌ Error al obtener ranking por curso:", error);
+    res.status(500).json({ error: "Error al obtener ranking por curso" });
+  }
+});
+
+// Ruta: obtener ranking de cursos por total de puntos (usando archivo JSON)
+app.get("/ranking/cursos-total", async (req, res) => {
+  try {
+    // Usar solo el archivo JSON para consistencia
+    const estudiantesLocal = getEstudiantes();
+    
+    // Agrupar por curso y calcular totales
+    const cursoStats = {};
+    estudiantesLocal.forEach(estudiante => {
+      const curso = estudiante.curso;
+      if (!cursoStats[curso]) {
+        cursoStats[curso] = {
+          curso: curso,
+          total_estudiantes: 0,
+          total_puntos: 0
+        };
+      }
+      cursoStats[curso].total_estudiantes++;
+      cursoStats[curso].total_puntos += (estudiante.puntos || 0);
+    });
+    
+    // Convertir a array, calcular promedio y ordenar
+    const rankingCursos = Object.values(cursoStats)
+      .map(curso => ({
+        ...curso,
+        promedio_puntos: parseFloat((curso.total_puntos / curso.total_estudiantes).toFixed(1))
+      }))
+      .sort((a, b) => b.total_puntos - a.total_puntos);
+    
+    res.json(rankingCursos);
+  } catch (error) {
+    console.error("❌ Error al obtener ranking de cursos:", error);
+    res.status(500).json({ error: "Error al obtener ranking de cursos" });
+  }
+});
+
+// Ruta: obtener todos los cursos disponibles (usando archivo JSON)
+app.get("/cursos", async (req, res) => {
+  try {
+    // Usar solo el archivo JSON para consistencia
+    const estudiantes = getEstudiantes();
+    const cursosUnicos = [...new Set(estudiantes.map(est => est.curso))].sort();
+    res.json(cursosUnicos);
+  } catch (error) {
+    console.error("❌ Error al obtener cursos:", error);
+    res.status(500).json({ error: "Error al obtener cursos" });
   }
 });
 
 // Iniciar servidor
-const PORT = process.env.PORT || 8080;
-server.listen(PORT, () => {
-  console.log(`Servidor escuchando en el puerto ${PORT}`);
-});
-
-// Socket.IO: actualizar en tiempo real (si lo necesitas después)
-io.on('connection', (socket) => {
-  console.log('Cliente conectado');
-
-  socket.on('disconnect', () => {
-    console.log('Cliente desconectado');
-  });
+app.listen(PORT, () => {
+  console.log(`✅ Servidor backend iniciado en http://localhost:${PORT}`);
+  console.log("📊 Sistema de gamificación iniciado");
+  console.log("🔗 Rutas disponibles:");
+  console.log("   GET /ranking - Obtener ranking de estudiantes");
+  console.log("   GET /estudiantes - Obtener todos los estudiantes");
+  console.log("   GET /estudiantes/:id - Obtener estudiante por ID");
+  console.log("   PUT /estudiantes/:id/puntos - Actualizar puntos (requiere contraseña)");
+  console.log("   POST /estudiantes/:id/sumar - Sumar puntos (requiere contraseña)");
+  console.log("   POST /estudiantes/:id/restar - Restar puntos (requiere contraseña)");
+  console.log("   GET /curso/:curso - Obtener estudiantes por curso");
+  console.log("   GET /ranking/curso/:curso - Obtener ranking por curso específico");
+  console.log("   GET /ranking/cursos-total - Obtener ranking de cursos por total de puntos");
+  console.log("   GET /cursos - Obtener lista de todos los cursos");
+  console.log("   GET /buscar/:nombre - Buscar estudiantes por nombre");
+  console.log("   POST /auth/verify - Verificar contraseña");
+  console.log("🔐 Contraseña de administrador: torneo2025");
 });
