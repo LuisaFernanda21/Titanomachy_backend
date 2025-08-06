@@ -1,5 +1,33 @@
+# Dependencies
 node_modules/
-.env
-.git/
-test-local.js
-*.log
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Development files
+.env.local
+.env.development
+.env.test
+
+# IDE files
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test files
+test/
+tests/
+*.test.js
+
+# Documentation
+README.md
+docs/
+
+# Frontend build files (ya que están en otra carpeta)
+build/
+dist/
