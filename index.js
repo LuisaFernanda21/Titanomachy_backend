@@ -13,7 +13,7 @@ const {
 } = require("./estudiantes");
 
 const app = express();
-const PORT = 3001;
+const PORT = process.env.PORT || 3001;
 
 // Contraseña para gestionar puntos
 const ADMIN_PASSWORD = "torneo2025";
@@ -25,8 +25,8 @@ const db = pgp("postgres://postgres:01012021Lf*@localhost:5433/Torneo_local");
 app.use(cors());
 app.use(bodyParser.json());
 
-// Servir archivos estáticos del frontend
-app.use(express.static(path.join(__dirname, '../frontend')));
+// Servir archivos estáticos del frontend - DESHABILITADO para Railway
+// app.use(express.static(path.join(__dirname, '../frontend')));
 
 // Middleware para verificar contraseña en rutas protegidas
 const verifyPassword = (req, res, next) => {
@@ -37,9 +37,22 @@ const verifyPassword = (req, res, next) => {
   next();
 };
 
-// Ruta principal de prueba
+// Ruta principal de prueba - API Status
 app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, '../frontend/index.html'));
+  res.json({ 
+    message: "🏆 TITANOMACHY Backend API", 
+    status: "✅ Funcionando correctamente",
+    version: "1.0.0",
+    endpoints: [
+      "GET /ranking - Obtener ranking de estudiantes",
+      "GET /estudiantes - Obtener todos los estudiantes", 
+      "GET /estudiantes/:id - Obtener estudiante por ID",
+      "GET /ranking/cursos-total - Ranking por cursos",
+      "GET /ranking/curso/:curso - Ranking de un curso específico",
+      "POST /sumar-puntos - Sumar puntos (requiere password)",
+      "POST /restar-puntos - Restar puntos (requiere password)"
+    ]
+  });
 });
 
 // Ruta: obtener el ranking de estudiantes (usando archivo JSON)
@@ -312,8 +325,8 @@ app.get("/cursos", async (req, res) => {
 
 // Iniciar servidor
 app.listen(PORT, () => {
-  console.log(`✅ Servidor backend iniciado en http://localhost:${PORT}`);
-  console.log("📊 Sistema de gamificación iniciado");
+  console.log(`✅ Servidor backend iniciado en puerto ${PORT}`);
+  console.log("📊 Sistema de gamificación TITANOMACHY iniciado");
   console.log("🔗 Rutas disponibles:");
   console.log("   GET /ranking - Obtener ranking de estudiantes");
   console.log("   GET /estudiantes - Obtener todos los estudiantes");
