@@ -1,52 +1,51 @@
-// Servidor mínimo para debug en Railway
-const express = require("express");
+// Servidor ultra-mínimo para Railway
+const http = require('http');
 
-console.log("🔧 Iniciando servidor mínimo...");
+console.log('� Iniciando servidor HTTP nativo...');
 
-const app = express();
 const PORT = process.env.PORT || 3001;
+console.log(`🔧 Puerto: ${PORT}`);
 
-console.log(`🔧 Puerto configurado: ${PORT}`);
-
-// Middleware básico
-app.use(express.json());
-
-console.log("✅ Middleware configurado");
-
-// Ruta de prueba simple
-app.get("/", (req, res) => {
-  res.json({ 
-    message: "🏆 TITANOMACHY Backend - Funcionando", 
-    port: PORT,
-    timestamp: new Date().toISOString()
-  });
+const server = http.createServer((req, res) => {
+  console.log(`📝 Request: ${req.method} ${req.url}`);
+  
+  // Headers CORS
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Content-Type', 'application/json');
+  
+  if (req.url === '/' || req.url === '/health') {
+    res.writeHead(200);
+    res.end(JSON.stringify({
+      message: '🏆 TITANOMACHY Backend funcionando',
+      status: 'OK',
+      port: PORT,
+      timestamp: new Date().toISOString()
+    }));
+  } else if (req.url === '/test') {
+    res.writeHead(200);
+    res.end(JSON.stringify({ test: 'OK', working: true }));
+  } else {
+    res.writeHead(404);
+    res.end(JSON.stringify({ error: 'Not found' }));
+  }
 });
 
-app.get("/test", (req, res) => {
-  res.json({ test: "OK", status: "working" });
+server.listen(PORT, () => {
+  console.log(`✅ Servidor HTTP iniciado en puerto ${PORT}`);
+  console.log(`🌐 Disponible en: http://localhost:${PORT}`);
 });
 
-console.log("✅ Rutas configuradas");
-
-// Iniciar servidor
-const server = app.listen(PORT, () => {
-  console.log(`✅ Servidor iniciado exitosamente en puerto ${PORT}`);
-  console.log(`🌐 Servidor disponible en: http://localhost:${PORT}`);
-});
-
-// Manejo de errores del servidor
 server.on('error', (error) => {
   console.error('❌ Error del servidor:', error);
   process.exit(1);
 });
 
-// Manejo de señales
 process.on('SIGTERM', () => {
-  console.log('🛑 SIGTERM recibido, cerrando servidor...');
+  console.log('🛑 SIGTERM - Cerrando servidor...');
   server.close(() => {
-    console.log('✅ Servidor cerrado correctamente');
+    console.log('✅ Servidor cerrado');
     process.exit(0);
   });
 });
 
-console.log("🎯 Configuración completa - esperando conexiones...");
+console.log('🎯 Servidor configurado - esperando requests...');
