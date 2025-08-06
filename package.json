@@ -1,13 +1,15 @@
 {
-  "name": "backend",
+  "name": "titanomachy-backend",
   "version": "1.0.0",
+  "description": "Backend para el sistema de gamificación TITANOMACHY TOURNAMENT",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
+    "dev": "node index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": ["gamification", "tournament", "points", "ranking", "backend"],
+  "author": "Luisa Fernanda",
   "license": "ISC",
   "dependencies": {
     "body-parser": "^2.2.0",
@@ -25,6 +27,5 @@
   "bugs": {
     "url": "https://github.com/LuisaFernanda21/Aplicacion-backend/issues"
   },
-  "homepage": "https://github.com/LuisaFernanda21/Aplicacion-backend#readme",
-  "description": ""
+  "homepage": "https://github.com/LuisaFernanda21/Aplicacion-backend#readme"
 }
