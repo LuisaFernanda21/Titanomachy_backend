@@ -1,27 +1,25 @@
 {
   "name": "titanomachy-backend",
   "version": "1.0.0",
-  "description": "Backend para el sistema de gamificación TITANOMACHY TOURNAMENT",
+  "description": "Backend para el sistema de gamificación TITANOMACHY",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "dev": "node index.js",
+    "dev": "nodemon index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": ["gamification", "tournament", "points", "ranking", "backend"],
-  "author": "Luisa Fernanda",
-  "license": "ISC",
+  "keywords": ["gamification", "education", "tournament"],
+  "author": "Your Name",
+  "license": "MIT",
   "dependencies": {
-    "body-parser": "^1.20.2",
+    "express": "^4.18.2",
     "cors": "^2.8.5",
-    "express": "^4.18.2"
+    "body-parser": "^1.20.2"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/LuisaFernanda21/Aplicacion-backend.git"
+  "devDependencies": {
+    "nodemon": "^3.0.1"
   },
-  "bugs": {
-    "url": "https://github.com/LuisaFernanda21/Aplicacion-backend/issues"
-  },
-  "homepage": "https://github.com/LuisaFernanda21/Aplicacion-backend#readme"
+  "engines": {
+    "node": ">=16.0.0"
+  }
 }

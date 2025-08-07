@@ -16,17 +16,31 @@ const {
 
 const app = express();
 const PORT = process.env.PORT || 3001;
-const PASSWORD = "torneo2025";
+const PASSWORD = process.env.ADMIN_PASSWORD || "torneo2025";
+const NODE_ENV = process.env.NODE_ENV || "development";
 
 console.log("🚀 Iniciando servidor TITANOMACHY...");
+console.log(`🌍 Entorno: ${NODE_ENV}`);
 
 // Middleware
-app.use(cors());
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
+app.use(cors({
+  origin: NODE_ENV === "production" 
+    ? ["https://tu-app.vercel.app", "https://tu-app.up.railway.app"]
+    : true,
+  credentials: true
+}));
+
+app.use(bodyParser.json({ limit: '10mb' }));
+app.use(bodyParser.urlencoded({ extended: true, limit: '10mb' }));
+
+// Trust proxy for Railway/Vercel
+app.set('trust proxy', 1);
 
 // Configurar para servir archivos estáticos del frontend
-app.use(express.static(path.join(__dirname, '../frontend')));
+app.use(express.static(path.join(__dirname, '../frontend'), {
+  maxAge: NODE_ENV === "production" ? '1d' : 0,
+  etag: true
+}));
 
 console.log("✅ Módulos importados correctamente");
 console.log(`🔧 Configurando servidor en puerto ${PORT}`);
@@ -41,6 +55,7 @@ app.use((req, res, next) => {
 const verifyPassword = (req, res, next) => {
   const { password } = req.body;
   if (password !== PASSWORD) {
+    console.log(`❌ Intento de acceso con contraseña incorrecta desde IP: ${req.ip}`);
     return res.status(401).json({ error: "Contraseña incorrecta" });
   }
   next();
@@ -54,9 +69,11 @@ app.get("/health", (req, res) => {
   res.json({
     status: "OK",
     message: "TITANOMACHY Server is running",
+    environment: NODE_ENV,
     timestamp: new Date().toISOString(),
     students_loaded: estudiantes.length,
-    port: PORT
+    port: PORT,
+    version: "1.0.0"
   });
 });
 
@@ -312,39 +329,82 @@ app.get('/admin', (req, res) => {
 });
 
 // Manejo de errores para archivos no encontrados
-app.use((req, res) => {
+app.use((req, res, next) => {
   if (req.path.startsWith('/api/') || req.path.startsWith('/estudiantes/') || req.path.startsWith('/ranking/')) {
     res.status(404).json({ error: 'Endpoint no encontrado' });
   } else {
     // Para rutas del frontend, servir index.html (SPA)
-    res.sendFile(path.join(__dirname, '../frontend/index.html'));
+    res.sendFile(path.join(__dirname, '../frontend/index.html'), (err) => {
+      if (err) {
+        console.error('❌ Error serving index.html:', err);
+        res.status(500).send('Error interno del servidor');
+      }
+    });
   }
 });
 
-// Manejo de errores global
-process.on('uncaughtException', (error) => {
-  console.error('❌ Uncaught Exception:', error);
-});
-
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+// Manejo de errores global mejorado
+app.use((error, req, res, next) => {
+  console.error('❌ Error handler:', error);
+  res.status(500).json({
+    error: NODE_ENV === "production" ? "Error interno del servidor" : error.message,
+    timestamp: new Date().toISOString()
+  });
 });
 
 // Manejo de señales para cierre graceful
-process.on('SIGTERM', () => {
-  console.log('🛑 SIGTERM received, shutting down gracefully');
-  process.exit(0);
-});
+let server;
 
-process.on('SIGINT', () => {
-  console.log('🛑 SIGINT received, shutting down gracefully');
-  process.exit(0);
-});
+const gracefulShutdown = (signal) => {
+  console.log(`🛑 ${signal} received, shutting down gracefully`);
+  if (server) {
+    server.close(() => {
+      console.log('✅ HTTP server closed');
+      process.exit(0);
+    });
+    
+    // Force close after 10 seconds
+    setTimeout(() => {
+      console.log('❌ Could not close connections in time, forcefully shutting down');
+      process.exit(1);
+    }, 10000);
+  } else {
+    process.exit(0);
+  }
+};
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 // Iniciar servidor
-app.listen(PORT, () => {
-  console.log(`🌐 Servidor Express iniciado en http://localhost:${PORT}`);
-  console.log(`📊 API disponible en http://localhost:${PORT}/ranking`);
-  console.log(`⚡ Admin panel en http://localhost:${PORT}/admin`);
+server = app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🌐 Servidor Express iniciado en puerto ${PORT}`);
+  console.log(`📊 API disponible en /ranking`);
+  console.log(`⚡ Admin panel en /admin`);
   console.log(`🎮 TITANOMACHY TOURNAMENT - Sistema de gamificación activo`);
+  console.log(`🌍 Entorno: ${NODE_ENV}`);
+  
+  if (NODE_ENV === "development") {
+    console.log(`🔗 Local: http://localhost:${PORT}`);
+  }
+});
+
+// Handle server startup errors
+server.on('error', (error) => {
+  if (error.syscall !== 'listen') {
+    throw error;
+  }
+
+  switch (error.code) {
+    case 'EACCES':
+      console.error(`❌ Puerto ${PORT} requiere privilegios elevados`);
+      process.exit(1);
+      break;
+    case 'EADDRINUSE':
+      console.error(`❌ Puerto ${PORT} ya está en uso`);
+      process.exit(1);
+      break;
+    default:
+      throw error;
+  }
 });

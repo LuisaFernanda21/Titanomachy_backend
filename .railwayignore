@@ -5,29 +5,32 @@ node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+lerna-debug.log*
 
 # Development files
 .env.local
 .env.development
 .env.test
 
-# IDE files
-.vscode/
-.idea/
-
 # OS files
 .DS_Store
 Thumbs.db
+*.swp
+*.swo
 
 # Test files
-test/
-tests/
 *.test.js
+coverage/
 
-# Documentation
-README.md
-docs/
+# Temporary files
+tmp/
+temp/
 
-# Frontend build files (ya que están en otra carpeta)
-build/
-dist/
+# Editor files
+*.sublime-project
+*.sublime-workspace
+
+# Archives
+*.zip
+*.tar.gz
+*.rar
