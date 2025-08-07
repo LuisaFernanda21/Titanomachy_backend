@@ -25,7 +25,12 @@ console.log(`🌍 Entorno: ${NODE_ENV}`);
 // Middleware
 app.use(cors({
   origin: NODE_ENV === "production" 
-    ? ["https://tu-app.vercel.app", "https://tu-app.up.railway.app"]
+    ? [
+        "https://titanomachybackend-production.up.railway.app",
+        /\.railway\.app$/,
+        /\.vercel\.app$/,
+        /localhost:\d+$/
+      ]
     : true,
   credentials: true
 }));
